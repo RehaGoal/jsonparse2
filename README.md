@@ -1,6 +1,6 @@
-# JSONparse2
+# Async JSONparse2
 
-Fast library to parse a JSON stream using utf-8 encoding in Node.js, Deno or any modern browser. Fully compliant with the JSON spec and `JSON.parse(...)`.
+Fast library to parse a JSON stream asynchronously using utf-8 encoding in Node.js, Deno or any modern browser. Fully compliant with the JSON spec and `JSON.parse(...)`.
 
 *tldr;*
 
@@ -8,11 +8,11 @@ Fast library to parse a JSON stream using utf-8 encoding in Node.js, Deno or any
 import { JSONparser } from 'jsonparse2';
 
 const parser = new JSONparser();
-parser.onValue = (value) => { /* process data */}
+parser.onValue = async (value) => { /* process data */}
 
 // Or passing the stream in several chunks 
 try {
-  p.write('{ "test": ["a"] }');
+  await p.write('{ "test": ["a"] }');
   // onValue will be called 3 times:
   // "a"
   // ["a"]
@@ -63,8 +63,8 @@ Strings are inmutable in Javascript so every string operation creates a new stri
 
 #### Methods
 
-* **write(data: string|typedArray|buffer)** push data into the tokenizer
-* **onToken(token: TokenType, value: any, offset: number)** no-op method that the user should override to follow the tokenization process.
+* **write(data: string|typedArray|buffer): Promise<void>** push data into the tokenizer
+* **onToken(token: TokenType, value: any, offset: number): Promise<void>** no-op method that the user should override to follow the tokenization process.
 * **parseNumber(numberStr)** method used internally to parse numbers. By default, it is equivalent to `Number(numberStr)` but the user can override it if he wants some other behaviour.
  
 ```javascript
@@ -75,7 +75,7 @@ class MyTokenizer extends Tokenizer {
     // if number is too large. Just keep the string.
     return Number.isFinite(numberStr)) ? number : numberStr;
   }
-  onToken(token: TokenType, value: any) {
+  async onToken(token: TokenType, value: any) {
     if (token = TokenTypes.NUMBER && typeof value === 'string') {
       super(TokenTypes.STRING, value);
     } else {
@@ -89,7 +89,7 @@ const myTokenizer = new MyTokenizer();
 // or just overriding it
 const tokenizer = new Tokenizer();
 tokenizer.parseNumber = (numberStr) => { ... };
-tokenizer.onToken = (token, value, offset) => { ... };
+tokenizer.onToken = async (token, value, offset) => { ... };
 ```
 
 ### Parser
@@ -106,13 +106,13 @@ It takes no options.
 
 #### Methods
 
-* **write(token: TokenType, value: any)** push data into the tokenizer
-* **onValue(value: any)** no-op method that the user should override to get the parsed value.
+* **write(token: TokenType, value: any): Promise<void>** push data into the tokenizer
+* **onValue(value: any): Promise<void>** no-op method that the user should override to get the parsed value.
  
 ```javascript
 // You can override "onToken" by creating your own class extending Tokenizer
 class MyParser extends Parser {
-  onValue(value: any) {
+  async onValue(value: any) {
     // ...
   }
 }
@@ -121,7 +121,7 @@ const myParser = new MyParser();
 
 // or just overriding it
 const parser = new Parser();
-parser.onValue = (value) => { ... };
+parser.onValue = async (value) => { ... };
 ```
 
 ### JSONparse
@@ -143,22 +143,22 @@ This class is just for convenience. In reality, it simply connects the tokenizer
 const tokenizer = new Tokenizer(opts);
 const parser = new Parser();
 tokenizer.onToken = this.parser.write.bind(this.parser);
-parser.onValue = (value) => { /* Process values */ }
+parser.onValue = async (value) => { /* Process values */ }
 ```
 
 #### Methods
 
-* *write(token: TokenType, value: any)* alias to the Tokenizer write method
-* *onToken(token: TokenType, value: any, offset: number)* alias to the Tokenizer onToken method (write only)
-* *onValue(value: any)* alias to the Parser onValue method (write only)
+* *write(token: TokenType, value: any): Promise<void>* alias to the Tokenizer write method
+* *onToken(token: TokenType, value: any, offset: number): Promise<void>* alias to the Tokenizer onToken method (write only)
+* *onValue(value: any): Promise<void>* alias to the Parser onValue method (write only)
  
 ```javascript
 // You can override "onToken" by creating your own class extending Tokenizer
 class MyJsonParser extends JsonParser {
-  onToken(value: any) {
+  async onToken(value: any) {
     // ...
   }
-  onValue(value: any) {
+  async onValue(value: any) {
     // ...
   }
 }
@@ -167,8 +167,8 @@ const myJsonParser = new MyJsonParser();
 
 // or just overriding it
 const jsonParser = new JsonParser();
-jsonParser.onToken = (token, value, offset) => { ... };
-jsonParser.onValue = (value) => { ... };
+jsonParser.onToken = async (token, value, offset) => { ... };
+jsonParser.onValue = async (value) => { ... };
 ```
 
 ## Using JSONparse2
@@ -191,14 +191,14 @@ import { JsonParser } from 'jsonparse2';
 const parser = new JsonParser({ stringBufferSize: undefined });
 parser.onValue = console.log;
 
-parser.write('"Hello world!"'); // logs "Hello world!"
+await parser.write('"Hello world!"'); // logs "Hello world!"
 
 // Or passing the stream in several chunks 
-parser.write('"');
-parser.write('Hello');
-parser.write(' ');
-parser.write('world!');
-parser.write('"');// logs "Hello world!"
+await parser.write('"');
+await parser.write('Hello');
+await parser.write(' ');
+await parser.write('world!');
+await parser.write('"');// logs "Hello world!"
 ```
 
 Write is always a synchronous operation so any error during the parsing of the stream will be thrown during the write operation. After an error, the parser can't continue parsing.
@@ -207,11 +207,11 @@ Write is always a synchronous operation so any error during the parsing of the s
 import { JsonParser } from 'jsonparse2';
 
 const parser = new JsonParser({ stringBufferSize: undefined });
-parser.onValue = console.log;
+parser.onValue = async (...args) => {console.log(...args)};
 
 // Or passing the stream in several chunks 
 try {
-  parser.write('"""');
+  await parser.write('"""');
 } catch (err) {
   console.log(err); // logs 
 }
@@ -227,7 +227,7 @@ Imagine an endpoint that send a large amount of JSON objects one after the other
   import { JSONparser } from 'jsonparse2';
 
   const jsonparser = new JsonParser({ stringBufferSize: undefined });
-  parser.onValue = (value, key, parent, stack) => {
+  parser.onValue = async (value, key, parent, stack) => {
 	if (stack > 0) return; // ignore inner values
     // TODO process element
   }
@@ -237,7 +237,7 @@ Imagine an endpoint that send a large amount of JSON objects one after the other
   while(true) {
     const { done, value } = await reader.read();
     if (done) break;
-    jsonparse.write(value);
+    await jsonparse.write(value);
   }
 ```
 
@@ -250,7 +250,7 @@ Imagine an endpoint that send a large amount of JSON objects one after the other
   import { JsonParser } from 'jsonparse2';
 
   const jsonparser = new JsonParser({ stringBufferSize: undefined });
-  parser.onValue = (value, key, parent, stack) => {
+  parser.onValue = async (value, key, parent, stack) => {
     if (stack.length === 0) /* We are done. Exit. */; 
     if (stack > 1) return; // ignore inner values
     // By default, JSONparse2 keeps all the child elements in memory until the root parent is emitted.
@@ -264,7 +264,7 @@ Imagine an endpoint that send a large amount of JSON objects one after the other
   while(true) {
     const { done, value } = await reader.read();
     if (done) break;
-    jsonparse.write(value);
+    await jsonparse.write(value);
   }
 ```
 
@@ -281,6 +281,7 @@ JSONparse2 is:
 * Simpler and cleaner code. Uses ES6 and doesn't rely on deprecated Node.js method.
 * 100% unit test coverage.
 * Fully compliant with the JSON spec. You will always get the same result as using `JSON.parse()`.
+* Now asynchronous, so parsing/tokenization can be delayed until a Promise has finished (e.g. IndexedDB queries).
 
 
 ### Breaking changes compared to JSONparse
@@ -289,3 +290,5 @@ JSONparse2 is:
 * Characters above 244 are correctly parsed instead of throwing an error.
 * Trailing comas are not allowed in objects or arrays.
 * JSONparse uses a string as internal buffer by default. This offers better performance but can lead to memory exhaustion if your JSON include very long strings (due to V8 optimizations). To get the exact same behaviour as in JSON parse you should set the `stringBufferSize` to `64 * 1024`.
+* JSONparse is asynchronous, therefore calls to be write need to be `await`ed or chained via `Promise`s. Furthermore the `onToken`/`onValue` callbacks should return a `Promise`.
+* JSONparse is asynchronous, therefore calls to be write need to be `await`ed or chained via `Promise`s. Furthermore the `onToken`/`onValue` callbacks should return a `Promise`.

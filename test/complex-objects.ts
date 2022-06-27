@@ -8,15 +8,15 @@ const { test } = tap;
 const stringifiedJson = readFileSync(`${process.cwd()}/samplejson/basic.json`)
   .toString();
 
-test("complex objects", (t) => {
+test("complex objects", async (t) => {
   t.plan(1);
 
   const p = new JsonParser();
-  p.onValue = (value, key, parent, stack) => {
+  p.onValue = async (value, key, parent, stack) => {
     if (stack.length === 0) {
       t.deepEqual(JSON.parse(stringifiedJson), value);
     }
   };
 
-  p.write(stringifiedJson);
+  await p.write(stringifiedJson);
 });

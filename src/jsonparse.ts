@@ -1,21 +1,21 @@
-import Tokenizer, { TokenizerOptions } from "./tokenizer";
-import Parser, { StackElement } from "./parser";
+import AsyncTokenizer, { TokenizerOptions } from "./tokenizer";
+import AsyncParser, { StackElement } from "./parser";
 
-export default class JSONParser {
-  private tokenizer: Tokenizer;
-  private parser: Parser;
+export default class AsyncJSONParser {
+  private tokenizer: AsyncTokenizer;
+  private parser: AsyncParser;
 
   constructor(opts: TokenizerOptions = {}) {
-    this.tokenizer = new Tokenizer(opts);
-    this.parser = new Parser();
+    this.tokenizer = new AsyncTokenizer(opts);
+    this.parser = new AsyncParser();
     this.tokenizer.onToken = this.parser.write.bind(this.parser);
   }
 
-  public write(input: Iterable<number> | string) {
-    this.tokenizer.write(input);
+  public async write(input: Iterable<number> | string): Promise<void> {
+    return this.tokenizer.write(input);
   }
 
-  public set onToken(cb: (token: number, value: any, offset: number) => void) {
+  public set onToken(cb: (token: number, value: any, offset: number) => Promise<void>) {
     this.tokenizer.onToken = cb;
   }
 
@@ -25,7 +25,7 @@ export default class JSONParser {
       key: string | number | undefined,
       parent: any,
       stack: StackElement[],
-    ) => void,
+    ) => Promise<void>,
   ) {
     this.parser.onValue = cb;
   }

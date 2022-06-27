@@ -62,7 +62,7 @@ const defaultOpts: TokenizerOptions = {
   numberBufferSize: 0,
 };
 
-export default class Tokenizer {
+export default class AsyncTokenizer {
   private state = TokenizerStates.START;
 
   private bufferedString: StringBuilder;
@@ -70,9 +70,9 @@ export default class Tokenizer {
 
   private unicode: string | undefined = undefined; // unicode escapes
   private highSurrogate: number | undefined = undefined;
-  private bytes_remaining = 0; // number of bytes remaining in multi byte utf8 char to read after split boundary
-  private bytes_in_sequence = 0; // bytes in multi byte utf8 char to read
-  private char_split_buffer = new Uint8Array(4); // for rebuilding chars split before boundary is reached
+  private bytesRemaining = 0; // number of bytes remaining in multi byte utf8 char to read after split boundary
+  private bytesInSequence = 0; // bytes in multi byte utf8 char to read
+  private charSplitBuffer = new Uint8Array(4); // for rebuilding chars split before boundary is reached
   private encoder = new TextEncoder();
   private offset = -1;
 
@@ -87,21 +87,21 @@ export default class Tokenizer {
       : new NonBufferedString();
   }
 
-  public write(input: Iterable<number> | string): void {
+  public async write(input: Iterable<number> | string): Promise<void> {
     let buffer: Uint8Array;
     if (input instanceof Uint8Array) {
       buffer = input;
-    } else if (typeof input === "string") {
+    } else if (typeof input === 'string') {
       buffer = this.encoder.encode(input);
     } else if ((input as any).buffer || Array.isArray(input)) {
       buffer = Uint8Array.from(input);
     } else {
       throw new TypeError(
-        "Unexpected type. The `write` function only accepts TypeArrays and Strings.",
+        'Unexpected type. The `write` function only accepts TypeArrays and Strings.',
       );
     }
 
-    for (var i = 0; i < buffer.length; i += 1) {
+    for (let i = 0; i < buffer.length; i += 1) {
       const n = buffer[i]; // get current byte from buffer
       switch (this.state) {
         case TokenizerStates.START:
@@ -118,27 +118,27 @@ export default class Tokenizer {
           }
 
           if (n === charset.LEFT_CURLY_BRACKET) {
-            this.onToken(LEFT_BRACE, "{", this.offset);
+            await this.onToken(LEFT_BRACE, '{', this.offset);
             continue;
           }
           if (n === charset.RIGHT_CURLY_BRACKET) {
-            this.onToken(RIGHT_BRACE, "}", this.offset);
+            await this.onToken(RIGHT_BRACE, '}', this.offset);
             continue;
           }
           if (n === charset.LEFT_SQUARE_BRACKET) {
-            this.onToken(LEFT_BRACKET, "[", this.offset);
+            await this.onToken(LEFT_BRACKET, '[', this.offset);
             continue;
           }
           if (n === charset.RIGHT_SQUARE_BRACKET) {
-            this.onToken(RIGHT_BRACKET, "]", this.offset);
+            await this.onToken(RIGHT_BRACKET, ']', this.offset);
             continue;
           }
           if (n === charset.COLON) {
-            this.onToken(COLON, ":", this.offset);
+            await this.onToken(COLON, ':', this.offset);
             continue;
           }
           if (n === charset.COMMA) {
-            this.onToken(COMMA, ",", this.offset);
+            await this.onToken(COMMA, ',', this.offset);
             continue;
           }
 
@@ -188,8 +188,8 @@ export default class Tokenizer {
         // STRING
         case TokenizerStates.STRING_DEFAULT:
           if (n === charset.QUOTATION_MARK) {
-            const string = this.bufferedString.toString();
-            this.onToken(STRING, string, this.offset);
+            const str = this.bufferedString.toString();
+            await this.onToken(STRING, str, this.offset);
             this.offset += this.bufferedString.byteLength + 1;
             this.state = TokenizerStates.START;
             continue;
@@ -202,25 +202,26 @@ export default class Tokenizer {
 
           if (n >= 128) { // Parse multi byte (>=128) chars one at a time
             if (n >= 194 && n <= 223) {
-              this.bytes_in_sequence = 2;
+              this.bytesInSequence = 2;
             } else if (n <= 239) {
-              this.bytes_in_sequence = 3;
+              this.bytesInSequence = 3;
             } else {
-              this.bytes_in_sequence = 4;
+              this.bytesInSequence = 4;
             }
 
-            if (this.bytes_in_sequence <= buffer.length - i) { // if bytes needed to complete char fall outside buffer length, we have a boundary split
+            if (this.bytesInSequence <= buffer.length - i) {
+              // if bytes needed to complete char fall outside buffer length, we have a boundary split
               this.bufferedString.appendBuf(
                 buffer,
                 i,
-                i + this.bytes_in_sequence,
+                i + this.bytesInSequence,
               );
-              i += this.bytes_in_sequence - 1;
+              i += this.bytesInSequence - 1;
               continue;
             }
 
-            this.bytes_remaining = i + this.bytes_in_sequence - buffer.length;
-            this.char_split_buffer.set(buffer.subarray(i));
+            this.bytesRemaining = i + this.bytesInSequence - buffer.length;
+            this.charSplitBuffer.set(buffer.subarray(i));
             i = buffer.length - 1;
             this.state = TokenizerStates.STRING_INCOMPLETE_CHAR;
             continue;
@@ -235,16 +236,16 @@ export default class Tokenizer {
         case TokenizerStates.STRING_INCOMPLETE_CHAR:
           // check for carry over of a multi byte char split between data chunks
           // & fill temp buffer it with start of this data chunk up to the boundary limit set in the last iteration
-          this.char_split_buffer.set(
-            buffer.subarray(i, i + this.bytes_remaining),
-            this.bytes_in_sequence - this.bytes_remaining,
+          this.charSplitBuffer.set(
+            buffer.subarray(i, i + this.bytesRemaining),
+            this.bytesInSequence - this.bytesRemaining,
           );
           this.bufferedString.appendBuf(
-            this.char_split_buffer,
+            this.charSplitBuffer,
             0,
-            this.bytes_in_sequence,
+            this.bytesInSequence,
           );
-          i = this.bytes_remaining - 1;
+          i = this.bytesRemaining - 1;
           this.state = TokenizerStates.STRING_DEFAULT;
           continue;
         case TokenizerStates.STRING_AFTER_BACKSLASH:
@@ -256,7 +257,7 @@ export default class Tokenizer {
           }
 
           if (n === charset.LATIN_SMALL_LETTER_U) {
-            this.unicode = "";
+            this.unicode = '';
             this.state = TokenizerStates.STRING_UNICODE_DIGIT_1;
             continue;
           }
@@ -287,7 +288,7 @@ export default class Tokenizer {
           ) {
             const intVal = parseInt(this.unicode + String.fromCharCode(n), 16);
             if (this.highSurrogate === undefined) {
-              if (intVal >= 0xD800 && intVal <= 0xDBFF) { //<55296,56319> - highSurrogate
+              if (intVal >= 0xD800 && intVal <= 0xDBFF) { // <55296,56319> - highSurrogate
                 this.highSurrogate = intVal;
               } else {
                 this.bufferedString.appendBuf(
@@ -295,7 +296,7 @@ export default class Tokenizer {
                 );
               }
             } else {
-              if (intVal >= 0xDC00 && intVal <= 0xDFFF) { //<56320,57343> - lowSurrogate
+              if (intVal >= 0xDC00 && intVal <= 0xDFFF) { // <56320,57343> - lowSurrogate
                 this.bufferedString.appendBuf(
                   this.encoder.encode(
                     String.fromCharCode(this.highSurrogate, intVal),
@@ -311,7 +312,8 @@ export default class Tokenizer {
             this.state = TokenizerStates.STRING_DEFAULT;
             continue;
           }
-          // Number
+        // Number
+        // tslint:disable-next-line:no-switch-case-fall-through
         case TokenizerStates.NUMBER_AFTER_INITIAL_MINUS:
           if (n === charset.DIGIT_ZERO) {
             this.bufferedNumber.appendChar(n);
@@ -343,7 +345,7 @@ export default class Tokenizer {
           }
 
           i -= 1;
-          this.emitNumber();
+          await this.emitNumber();
           this.state = TokenizerStates.START;
           continue;
         case TokenizerStates.NUMBER_AFTER_INITIAL_NON_ZERO:
@@ -368,7 +370,7 @@ export default class Tokenizer {
           }
 
           i -= 1;
-          this.emitNumber();
+          await this.emitNumber();
           this.state = TokenizerStates.START;
           continue;
         case TokenizerStates.NUMBER_AFTER_FULL_STOP:
@@ -395,7 +397,7 @@ export default class Tokenizer {
           }
 
           i -= 1;
-          this.emitNumber();
+          await this.emitNumber();
           this.state = TokenizerStates.START;
           continue;
         case TokenizerStates.NUMBER_AFTER_E:
@@ -404,7 +406,8 @@ export default class Tokenizer {
             this.state = TokenizerStates.NUMBER_AFTER_E_AND_SIGN;
             continue;
           }
-          // Allow cascading
+        // Allow cascading
+        // tslint:disable-next-line:no-switch-case-fall-through
         case TokenizerStates.NUMBER_AFTER_E_AND_SIGN:
           if (n >= charset.DIGIT_ZERO && n <= charset.DIGIT_NINE) {
             this.bufferedNumber.appendChar(n);
@@ -420,7 +423,7 @@ export default class Tokenizer {
           }
 
           i -= 1;
-          this.emitNumber();
+          await this.emitNumber();
           this.state = TokenizerStates.START;
           continue;
         // TRUE
@@ -439,7 +442,7 @@ export default class Tokenizer {
         case TokenizerStates.TRUE3:
           if (n === charset.LATIN_SMALL_LETTER_E) {
             this.state = TokenizerStates.START;
-            this.onToken(TRUE, true, this.offset);
+            await this.onToken(TRUE, true, this.offset);
             this.offset += 3;
             continue;
           }
@@ -466,7 +469,7 @@ export default class Tokenizer {
         case TokenizerStates.FALSE4:
           if (n === charset.LATIN_SMALL_LETTER_E) {
             this.state = TokenizerStates.START;
-            this.onToken(FALSE, false, this.offset);
+            await this.onToken(FALSE, false, this.offset);
             this.offset += 4;
             continue;
           }
@@ -477,15 +480,17 @@ export default class Tokenizer {
             this.state = TokenizerStates.NULL2;
             continue;
           }
+        // tslint:disable-next-line:no-switch-case-fall-through
         case TokenizerStates.NULL2:
           if (n === charset.LATIN_SMALL_LETTER_L) {
             this.state = TokenizerStates.NULL3;
             continue;
           }
+        // tslint:disable-next-line:no-switch-case-fall-through
         case TokenizerStates.NULL3:
           if (n === charset.LATIN_SMALL_LETTER_L) {
             this.state = TokenizerStates.START;
-            this.onToken(NULL, null, this.offset);
+            await this.onToken(NULL, null, this.offset);
             this.offset += 3;
             continue;
           }
@@ -493,14 +498,14 @@ export default class Tokenizer {
 
       throw new Error(
         `Unexpected "${String.fromCharCode(n)}" at position "${i}" in state ${
-          TokenizerStates[this.state]
+        TokenizerStates[this.state]
         }`,
       );
     }
   }
 
-  private emitNumber(): void {
-    this.onToken(
+  private async emitNumber(): Promise<void> {
+    await this.onToken(
       NUMBER,
       this.parseNumber(this.bufferedNumber.toString()),
       this.offset,
@@ -512,7 +517,7 @@ export default class Tokenizer {
     return Number(numberStr);
   }
 
-  public onToken(token: TokenType, value: any, offset: number): void {
+  public async onToken(token: TokenType, value: any, offset: number): Promise<void> {
     // Override
   }
 }

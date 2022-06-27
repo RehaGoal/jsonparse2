@@ -8,12 +8,12 @@ const values = [
 ];
 const expected = values.map((str) => JSON.parse(str));
 
-test("null", (t) => {
+test("null", async (t) => {
   t.plan(expected.length);
   let i = 0;
 
   const p = new JsonParser();
-  p.onValue = (value) => {
+  p.onValue = async (value) => {
     t.equal(
       value,
       expected[i],
@@ -22,18 +22,18 @@ test("null", (t) => {
     i += 1;
   };
 
-  values.forEach((str) => {
-    p.write(str);
-    p.write(" ");
-  });
+  for (const str of values) {
+    await p.write(str);
+    await p.write(" ");
+  }
 });
 
-test("null chuncked", (t) => {
+test("null chuncked", async (t) => {
   t.plan(expected.length);
   let i = 0;
 
   const p = new JsonParser();
-  p.onValue = (value) => {
+  p.onValue = async (value) => {
     t.equal(
       value,
       expected[i],
@@ -42,13 +42,15 @@ test("null chuncked", (t) => {
     i += 1;
   };
 
-  values.forEach((str) => {
-    str.split("").forEach((c) => p.write(c));
-    p.write(" ");
-  });
+  for (const str of values) {
+    for (const c of str.split("")) {
+      await p.write(c);
+    }
+    await p.write(" ");
+  }
 });
 
-test("fail on invalid values", (t) => {
+test("fail on invalid values", async (t) => {
   const values = [
     "nUll",
     "nuLl",
@@ -56,13 +58,13 @@ test("fail on invalid values", (t) => {
   ];
   t.plan(values.length);
 
-  values.forEach((str) => {
+  for (const str of values) {
     const p = new JsonParser();
     try {
-      p.write(str);
+      await p.write(str);
       t.fail(`Expected to fail on value "${str}"`);
     } catch (e) {
       t.pass();
     }
-  });
+  }
 });

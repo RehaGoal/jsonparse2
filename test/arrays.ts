@@ -3,7 +3,7 @@ import JsonParser from "../src/jsonparse";
 
 const { test } = tap;
 
-test("arrays", (t) => {
+test("arrays", async (t) => {
   const values = [
     "[]",
     "[0,1,-1]",
@@ -39,7 +39,7 @@ test("arrays", (t) => {
   t.plan(expected.length);
 
   const p = new JsonParser();
-  p.onValue = (value, key, parent, stack) => {
+  p.onValue = async (value, key, parent, stack) => {
     const keys = stack
       .slice(1)
       .map((item) => item.key)
@@ -51,10 +51,12 @@ test("arrays", (t) => {
     );
   };
 
-  values.forEach((str) => p.write(str));
+  for (const str of values) {
+    await p.write(str);
+  }
 });
 
-test("fail on invalid values", (t) => {
+test("fail on invalid values", async (t) => {
   const values = [
     "[,",
     "[1, eer]",
@@ -64,13 +66,13 @@ test("fail on invalid values", (t) => {
   ];
   t.plan(values.length);
 
-  values.forEach((str) => {
+  for (const str of values) {
     const p = new JsonParser();
     try {
-      p.write(str);
+      await p.write(str);
       t.fail(`Expected to fail on value "${str}"`);
     } catch (e) {
       t.pass();
     }
-  });
+  }
 });

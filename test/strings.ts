@@ -9,7 +9,7 @@ const { QUOTATION_MARK } = charset;
 const quote = String.fromCharCode(QUOTATION_MARK);
 
 for (const stringBufferSize of [0, 64 * 1024]) {
-  test(`simple string with stringBufferSize = ${stringBufferSize}`, (t) => {
+  test(`simple string with stringBufferSize = ${stringBufferSize}`, async (t) => {
     const values = [
       "Hello world!",
       '\\r\\n\\f\\t\\\\\\/\\"',
@@ -25,7 +25,7 @@ for (const stringBufferSize of [0, 64 * 1024]) {
     let i = 0;
 
     const p = new JsonParser({ stringBufferSize });
-    p.onValue = (value) => {
+    p.onValue = async (value) => {
       t.equal(
         value,
         expected[i],
@@ -34,101 +34,103 @@ for (const stringBufferSize of [0, 64 * 1024]) {
       i += 1;
     };
 
-    values.forEach((str) => {
-      p.write(quote);
-      str.split("").forEach((c) => p.write(c));
-      p.write(quote);
-    });
+    for (const str of values) {
+      await p.write(quote);
+      for (const c of str.split("")) {
+        await p.write(c);
+      }
+      await p.write(quote);
+    }
   });
 
-  test("multibyte characters", (t) => {
+  test("multibyte characters", async (t) => {
     t.plan(5);
 
-    t.test("2 byte utf8 'De' character: д", (t) => {
+    t.test("2 byte utf8 'De' character: д", async (t) => {
       t.plan(1);
 
       const p = new JsonParser({ stringBufferSize });
-      p.onValue = (value) => t.equal(value, "д");
+      p.onValue = async (value) => t.equal(value, "д");
 
-      p.write(quote);
-      p.write(new Uint8Array([0xd0, 0xb4]));
-      p.write(quote);
+      await p.write(quote);
+      await p.write(new Uint8Array([0xd0, 0xb4]));
+      await p.write(quote);
     });
 
-    t.test("3 byte utf8 'Han' character: 我", (t) => {
+    t.test("3 byte utf8 'Han' character: 我", async (t) => {
       t.plan(1);
 
       const p = new JsonParser({ stringBufferSize });
-      p.onValue = (value) => t.equal(value, "我");
+      p.onValue = async (value) => t.equal(value, "我");
 
-      p.write(quote);
-      p.write(new Uint8Array([0xe6, 0x88, 0x91]));
-      p.write(quote);
+      await p.write(quote);
+      await p.write(new Uint8Array([0xe6, 0x88, 0x91]));
+      await p.write(quote);
     });
 
-    t.test("4 byte utf8 character (unicode scalar U+2070E): 𠜎", (t) => {
+    t.test("4 byte utf8 character (unicode scalar U+2070E): 𠜎", async (t) => {
       t.plan(1);
 
       const p = new JsonParser({ stringBufferSize });
-      p.onValue = (value) => t.equal(value, "𠜎");
+      p.onValue = async (value) => t.equal(value, "𠜎");
 
-      p.write(quote);
-      p.write(new Uint8Array([0xf0, 0xa0, 0x9c, 0x8e]));
-      p.write(quote);
+      await p.write(quote);
+      await p.write(new Uint8Array([0xf0, 0xa0, 0x9c, 0x8e]));
+      await p.write(quote);
     });
 
     t.test("chunking", (t) => {
       t.plan(4);
 
-      t.test("2 byte utf8 'De' character chunked inbetween 1st and 3nd byte: д", (
+      t.test("2 byte utf8 'De' character chunked inbetween 1st and 3nd byte: д", async (
         t,
       ) => {
         t.plan(1);
 
         const p = new JsonParser({ stringBufferSize });
-        p.onValue = (value) => t.equal(value, "д");
+        p.onValue = async (value) => t.equal(value, "д");
 
-        p.write(quote);
-        p.write(new Uint8Array([0xd0]));
-        p.write(new Uint8Array([0xb4]));
-        p.write(quote);
+        await p.write(quote);
+        await p.write(new Uint8Array([0xd0]));
+        await p.write(new Uint8Array([0xb4]));
+        await p.write(quote);
       });
 
-      t.test("3 byte utf8 'Han' character chunked inbetween 2nd and 3rd byte: 我", (
+      t.test("3 byte utf8 'Han' character chunked inbetween 2nd and 3rd byte: 我", async (
         t,
       ) => {
         t.plan(1);
 
         const p = new JsonParser({ stringBufferSize });
-        p.onValue = (value) => t.equal(value, "我");
+        p.onValue = async (value) => t.equal(value, "我");
 
-        p.write(quote);
-        p.write(new Uint8Array([0xe6, 0x88]));
-        p.write(new Uint8Array([0x91]));
-        p.write(quote);
+        await p.write(quote);
+        await p.write(new Uint8Array([0xe6, 0x88]));
+        await p.write(new Uint8Array([0x91]));
+        await p.write(quote);
       });
 
-      t.test("4 byte utf8 character (unicode scalar U+2070E) chunked inbetween 2nd and 3rd byte: 𠜎", (
+      t.test("4 byte utf8 character (unicode scalar U+2070E) chunked inbetween 2nd and 3rd byte: 𠜎", async (
         t,
       ) => {
         t.plan(1);
 
         const p = new JsonParser({ stringBufferSize });
-        p.onValue = (value) => t.equal(value, "𠜎");
+        p.onValue = async (value) => t.equal(value, "𠜎");
 
-        p.write(quote);
-        p.write(new Uint8Array([0xf0, 0xa0]));
-        p.write(new Uint8Array([0x9c, 0x8e]));
-        p.write(quote);
+        await p.write(quote);
+        await p.write(new Uint8Array([0xf0, 0xa0]));
+        await p.write(new Uint8Array([0x9c, 0x8e]));
+        await p.write(quote);
       });
 
-      t.test("1-4 byte utf8 character string chunked inbetween random bytes: Aж文𠜱B", (
+      t.test("1-4 byte utf8 character string chunked inbetween random bytes: Aж文𠜱B", async (
         t,
       ) => {
         t.plan(11);
 
         const p = new JsonParser({ stringBufferSize });
-        p.onValue = (value) => t.equal(value, "Aж文𠜱B");
+        p.onValue = async (value) => t.equal(value, "Aж文𠜱B");
 
         const eclectic_buffer = new Uint8Array([
           0x41, // A
@@ -147,64 +149,64 @@ for (const stringBufferSize of [0, 64 * 1024]) {
         for (let i = 0; i < 11; i++) {
           const first_buffer = eclectic_buffer.slice(0, i);
           const second_buffer = eclectic_buffer.slice(i);
-          p.write(quote);
-          p.write(first_buffer);
-          p.write(second_buffer);
-          p.write(quote);
+          await p.write(quote);
+          await p.write(first_buffer);
+          await p.write(second_buffer);
+          await p.write(quote);
         }
       });
     });
 
-    t.test("surrogate", (t) => {
+    t.test("surrogate", async (t) => {
       t.plan(3);
 
-      t.test("parse surrogate pair", (t) => {
+      t.test("parse surrogate pair", async (t) => {
         t.plan(1);
 
         const p = new JsonParser({ stringBufferSize });
-        p.onValue = (value) => t.equal(value, "😋");
+        p.onValue = async (value) => t.equal(value, "😋");
 
-        p.write('"\\uD83D\\uDE0B"');
+        await p.write('"\\uD83D\\uDE0B"');
       });
 
-      t.test("parse chunked surrogate pair", (t) => {
+      t.test("parse chunked surrogate pair", async (t) => {
         t.plan(1);
 
         const p = new JsonParser({ stringBufferSize });
-        p.onValue = (value) => t.equal(value, "😋");
+        p.onValue = async (value) => t.equal(value, "😋");
 
-        p.write(quote);
-        p.write("\\uD83D");
-        p.write("\\uDE0B");
-        p.write(quote);
+        await p.write(quote);
+        await p.write("\\uD83D");
+        await p.write("\\uDE0B");
+        await p.write(quote);
       });
 
-      t.test("not error on broken surrogate pair", (t) => {
+      t.test("not error on broken surrogate pair", async (t) => {
         t.plan(1);
 
         const p = new JsonParser({ stringBufferSize });
-        p.onValue = (value) => t.equal(value, "�");
+        p.onValue = async (value) => t.equal(value, "�");
 
-        p.write(quote);
-        p.write("\\uD83D\\uEFFF");
-        p.write(quote);
+        await p.write(quote);
+        await p.write("\\uD83D\\uEFFF");
+        await p.write(quote);
       });
     });
   });
 }
 
-test("should flush the buffer if there is not space for incoming data", (t) => {
+test("should flush the buffer if there is not space for incoming data", async (t) => {
   t.plan(1);
   const p = new JsonParser({ stringBufferSize: 5 });
-  p.onValue = (value) => t.equal(value, "aaaa𠜎");
+  p.onValue = async (value) => t.equal(value, "aaaa𠜎");
 
-  p.write(quote);
-  p.write("aaaa");
-  p.write("𠜎");
-  p.write(quote);
+  await p.write(quote);
+  await p.write("aaaa");
+  await p.write("𠜎");
+  await p.write(quote);
 });
 
-test("fail on invalid values", (t) => {
+test("fail on invalid values", async (t) => {
   const values = [
     "\n",
     "\\j",
@@ -215,15 +217,15 @@ test("fail on invalid values", (t) => {
   ];
   t.plan(values.length);
 
-  values.forEach((str) => {
+  for (const str of values) {
     const p = new JsonParser();
     try {
-      p.write(quote);
-      p.write(str);
-      p.write(quote);
+      await p.write(quote);
+      await p.write(str);
+      await p.write(quote);
       t.fail(`Expected to fail on value "${str}"`);
     } catch (e) {
       t.pass();
     }
-  });
+  }
 });

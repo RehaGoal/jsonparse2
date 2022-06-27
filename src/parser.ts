@@ -35,7 +35,7 @@ export interface StackElement {
   mode: ParserMode | undefined;
 }
 
-export default class Parser {
+export default class AsyncParser {
   private state: ParserState = ParserState.VALUE;
   private mode: ParserMode | undefined = undefined;
   private key: string | number | undefined = undefined;
@@ -46,17 +46,17 @@ export default class Parser {
     this.stack.push({ key: this.key, value: this.value, mode: this.mode });
   }
 
-  private pop(): void {
+  private async pop(): Promise<void> {
     const value = this.value;
     ({ key: this.key, value: this.value, mode: this.mode } = this.stack
       .pop() as StackElement);
-    this.onValue(value, this.key, this.value, this.stack);
+    await this.onValue(value, this.key, this.value, this.stack);
     this.state = this.mode !== undefined
       ? ParserState.COMMA
       : ParserState.VALUE;
   }
 
-  public write(token: TokenType, value: any) {
+  public async write(token: TokenType, value: any): Promise<void> {
     if (this.state === ParserState.VALUE) {
       if (
         token === STRING || token === NUMBER || token === TRUE ||
@@ -69,7 +69,7 @@ export default class Parser {
           this.value.push(value);
           this.state = ParserState.COMMA;
         }
-        this.onValue(value, this.key, this.value, this.stack);
+        await this.onValue(value, this.key, this.value, this.stack);
         return;
       }
 
@@ -111,7 +111,7 @@ export default class Parser {
         this.mode === ParserMode.ARRAY && token === RIGHT_BRACKET &&
         this.value.length === 0
       ) {
-        this.pop();
+        await this.pop();
         return;
       }
     }
@@ -124,7 +124,7 @@ export default class Parser {
       }
 
       if (token === RIGHT_BRACE && Object.keys(this.value).length === 0) {
-        this.pop();
+        await this.pop();
         return;
       }
     }
@@ -154,7 +154,7 @@ export default class Parser {
         token === RIGHT_BRACE && this.mode === ParserMode.OBJECT ||
         token === RIGHT_BRACKET && this.mode === ParserMode.ARRAY
       ) {
-        this.pop();
+        await this.pop();
         return;
       }
     }
@@ -165,12 +165,12 @@ export default class Parser {
     );
   }
 
-  public onValue(
+  public async onValue(
     value: any,
     key: string | number | undefined,
     parent: any,
     stack: StackElement[],
-  ): void {
+  ): Promise<void> {
     // Override me
   }
 }
